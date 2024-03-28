@@ -10,6 +10,10 @@ def decontract(word):
     return contractions.fix(word)
 
 def remove_contractions_from_reviews(critic_reviews):
+    """
+    Note: This may cause issues for certain contractions like ain't which may split into multiple pairs of words.
+    Just something to keep in mind for this in the future.
+    """
     return critic_reviews['review_content'].apply(lambda x: ' '.join([decontract(word) for word in x.split()]))
 
 def main() -> None:
