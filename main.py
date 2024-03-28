@@ -1,4 +1,6 @@
 import pandas as pd
+import re
+
 import contractions
 
 def load_data():
@@ -28,6 +30,9 @@ def main() -> None:
     # split contractions
     critic_reviews['review_content'] = remove_contractions_from_reviews(critic_reviews)
 
+
+    desc = input("Describe your movie, then press Enter: ").lower()
+    desc1 = re.sub("[^a-z0-9' ]", "", desc).split(" ")
 
 
 
