@@ -1,9 +1,16 @@
 import pandas as pd
+import contractions
 
 def load_data():
     critic_reviews = pd.read_csv("data/rotten_tomatoes_critic_reviews.csv")
     movie_data = pd.read_csv("data/rotten_tomatoes_movies.csv")
     return critic_reviews, movie_data
+
+def decontract(word):
+    return contractions.fix(word)
+
+def remove_contractions_from_reviews(critic_reviews):
+    return critic_reviews['review_content'].apply(lambda x: ' '.join([decontract(word) for word in x.split()]))
 
 def main() -> None:
     critic_reviews, movie_data = load_data()
@@ -14,7 +21,9 @@ def main() -> None:
     # set review content to lowercase
     critic_reviews['review_content'] = critic_reviews['review_content'].apply(lambda x: str(x).lower())
 
-    temp = critic_reviews['review_content'].apply(lambda x: x.split())
+    # split contractions
+    critic_reviews['review_content'] = remove_contractions_from_reviews(critic_reviews)
+
 
 
 
