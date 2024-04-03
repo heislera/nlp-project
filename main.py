@@ -12,13 +12,45 @@ pd.set_option('display.max_columns', 30)
 
 
 
+
 def load_data():
     critic_reviews = pd.read_csv("data/rotten_tomatoes_critic_reviews.csv")
     movie_data = pd.read_csv("data/rotten_tomatoes_movies.csv")
     return critic_reviews, movie_data
 
+
+def clean_movie_data(movie_data):
+    fields = ['movie_title', 'movie_info', 'content_rating', 'genres', 'directors', 'authors', 'actors', 'production_company']
+    for field in fields:
+        #movie_data = movie_data[movie_data[field].notnull()] # needed?
+
+        # set content to lowercase
+        movie_data[field] = movie_data[field].apply(lambda x: str(x).lower())
+
+        # remove all punctuation except for apostrophes (for contractions)
+        if field != 'genres':
+            movie_data[field] = movie_data[field].apply(lambda x: re.sub("[^a-z0-9' ]", "", str(x)))
+
+    # split contractions for movie desc
+    # movie_data = movie_data['movie_info'].apply(lambda x: ' '.join([decontract(word) for word in x.split()]))
+
+
+def clean_review_data(critic_reviews):
+    # remove nulls from review content
+    critic_reviews = critic_reviews[critic_reviews['review_content'].notnull()]
+
+    # set review content to lowercase
+    critic_reviews['review_content'] = critic_reviews['review_content'].apply(lambda x: str(x).lower())
+
+    # split contractions, this can be optional
+    # this is really slow, maybe we just run this once and save the data as a separate column
+    # critic_reviews['review_content'] = remove_contractions_from_reviews(critic_reviews)
+    pass
+
+
 def decontract(word):
     return contractions.fix(word)
+
 
 def remove_contractions_from_reviews(critic_reviews):
     """
@@ -67,8 +99,8 @@ we may also dump reviews into this text blob:
 def main() -> None:
     critic_reviews, movie_data = load_data()
 
-    # remove nulls from review content
-    critic_reviews = critic_reviews[critic_reviews['review_content'].notnull()]
+    clean_review_data(critic_reviews)
+    clean_movie_data(movie_data)
 
     merge_features(movie_data, ['genres', 'movie_info'])
 
@@ -104,7 +136,6 @@ def compute_spacy_similarity(dataframe, input):
 
         if i % 300 == 0:
             print(i/dataframe["merged_features"].size)
-
 
 
 
