@@ -1,14 +1,20 @@
+import os
+import string
 import warnings
 
+import gensim
+import nltk
 import pandas as pd
 import re
 import spacy
 import contractions
 import numpy as np
+from gensim.models.doc2vec import TaggedDocument, Doc2Vec
+from nltk import word_tokenize
 
+pd.set_option('display.max_columns', None)
+nltk.download('punkt')
 
-
-pd.set_option('display.max_columns', 30)
 
 
 
@@ -28,8 +34,8 @@ def clean_movie_data(movie_data):
         movie_data[field] = movie_data[field].apply(lambda x: str(x).lower())
 
         # remove all punctuation except for apostrophes (for contractions)
-        if field != 'genres':
-            movie_data[field] = movie_data[field].apply(lambda x: re.sub("[^a-z0-9' ]", "", str(x)))
+        # if field != 'genres':
+        movie_data[field] = movie_data[field].apply(lambda x: re.sub("[^a-z0-9' ]", "", str(x)))
 
     # split contractions for movie desc
     # movie_data = movie_data['movie_info'].apply(lambda x: ' '.join([decontract(word) for word in x.split()]))
@@ -40,17 +46,22 @@ def clean_review_data(critic_reviews):
     critic_reviews = critic_reviews[critic_reviews['review_content'].notnull()]
 
     # set review content to lowercase
-    critic_reviews['review_content'] = critic_reviews['review_content'].apply(lambda x: str(x).lower())
-
+    critic_reviews.loc[:, 'review_content'] = critic_reviews['review_content'].apply(lambda x: str(x).lower())
+    critic_reviews.loc[:, 'review_content'] = critic_reviews["review_content"].apply(remove_punctuation)
     # split contractions, this can be optional
     # this is really slow, maybe we just run this once and save the data as a separate column
     # critic_reviews['review_content'] = remove_contractions_from_reviews(critic_reviews)
-    pass
+
+    return critic_reviews
+
+
 
 
 def decontract(word):
     return contractions.fix(word)
 
+def remove_punctuation(text):
+    return text.translate(str.maketrans('', '', string.punctuation))
 
 def remove_contractions_from_reviews(critic_reviews):
     """
@@ -96,24 +107,144 @@ we may also dump reviews into this text blob:
 """
 
 
+def get_reviews(critic_reviews, movie_link):
+    return critic_reviews[critic_reviews["rotten_tomatoes_link"] == movie_link]
+
+def create_training_data(critic_reviews, movie_data, features=None):
+    # this creates a file with the new cleaned and merged data column
+    # this column is what is fed into models for training for similarity probably
+    # if features contains True as the last attribute, all movie reviews will be included
+    """
+    Index(['rotten_tomatoes_link', 'movie_title', 'movie_info',
+       'critics_consensus', 'content_rating', 'genres', 'directors', 'authors',
+       'actors', 'original_release_date', 'streaming_release_date', 'runtime',
+       'production_company', 'tomatometer_status', 'tomatometer_rating',
+       'tomatometer_count', 'audience_status', 'audience_rating',
+       'audience_count', 'tomatometer_top_critics_count',
+       'tomatometer_fresh_critics_count', 'tomatometer_rotten_critics_count'],
+      dtype='object')
+
+    """
+
+    use_reviews = False
+
+    if features[-1]:
+        use_reviews = True
+        features = features[:-1]
+
+    df_name = "_".join(features)
+
+    if use_reviews:
+        df_name += "_WITH_REVIEWS"
+
+    if os.path.exists(f"data/{df_name}.csv"):
+        print("data already exists")
+        return
+
+    print("making movie documents")
+    # this modifies the movie_data dataframe to have a new "merged_features" column.
+    merge_features(movie_data, features)
+
+    if use_reviews:
+        # iterate over all movies, grab all reviews for that movie.
+        # merge those reviews into a single string, then append it at then end of the merged features
+        for index, row in movie_data.iterrows():
+            reviews = get_reviews(critic_reviews, row.rotten_tomatoes_link)
+            merged_reviews = " ".join(str(val) for val in reviews.review_content)
+            movie_data.at[index, "merged_features"] += " " + merged_reviews
+
+            if index % 100 == 0:
+                print(index/movie_data.shape[0])
+
+    movie_data.to_csv(f"data/{df_name}.csv")
+    print("finished making movie documents")
+
+def train_model(features, vector_size=50, epochs=20):
+    use_reviews = False
+
+    if features[-1]:
+        use_reviews = True
+        features = features[:-1]
+
+    df_name = "_".join(features)
+
+    if use_reviews:
+        df_name += "_WITH_REVIEWS"
+
+    training_df = pd.read_csv(f"data/{df_name}.csv")
+
+    tagged_data = []
+    print("begin making tagged data for model training")
+    for index, row in training_df.iterrows():
+        tagged_doc = TaggedDocument(words=word_tokenize(row.merged_features),
+                                    tags=[str(row.movie_title)])
+        tagged_data.append(tagged_doc)
+    print("finish making tagged data for model training")
+
+    print("begin training")
+    # docs for this are here https://radimrehurek.com/gensim/models/doc2vec.html
+    model = gensim.models.doc2vec.Doc2Vec(vector_size=vector_size, min_count=2, epochs=epochs)
+
+    model.build_vocab(tagged_data)
+
+    model.train(tagged_data, total_examples=model.corpus_count, epochs=epochs)
+    model.save("model.model")
+    print("finish training")
+
+    return model
+def generate_model(critic_reviews, movie_data, features):
+    create_training_data(critic_reviews, movie_data, features)
+    model = train_model(features)
+
+    return model
+
 def main() -> None:
     critic_reviews, movie_data = load_data()
 
-    clean_review_data(critic_reviews)
+    # for some reason this needs to be assigned
+    critic_reviews = clean_review_data(critic_reviews)
     clean_movie_data(movie_data)
 
-    merge_features(movie_data, ['genres', 'movie_info'])
+    # True at the end of this list tells the method that creates documents from our data to include review data
+    movie_data_features = ["movie_title", "genres", "directors", "actors", "movie_info", "critics_consensus", True]
 
-    desc = input("Describe your movie, then press Enter: ").lower()
-    desc1 = re.sub("[^a-z0-9' ]", "", desc)
+    model = generate_model(critic_reviews, movie_data, movie_data_features)
 
-    with warnings.catch_warnings(action="ignore"):
-        compute_spacy_similarity(movie_data, desc1)
 
-    similarity_minimum = 0.6
-    temp1 = movie_data[movie_data["similarity"] >= similarity_minimum]
-    temp2 = temp1.sort_values(by=["similarity"], ascending=False)
-    print(temp2["movie_title"], temp2["similarity"])
+    # below this is just testing the model
+
+    test_doc = critic_reviews.at[0, "review_content"]
+    print(movie_data[movie_data["rotten_tomatoes_link"] == critic_reviews.at[0, "rotten_tomatoes_link"]]["movie_title"])
+    print(test_doc)
+
+    # this is how we calculate similarity for an input doc
+    tokenized_doc = word_tokenize(test_doc.lower())
+    inferred_vector = model.infer_vector(tokenized_doc)
+    similar_docs = model.docvecs.most_similar([inferred_vector], topn=len(model.docvecs))
+
+    # the test doc is the very first movie, removing this check will similarity to all movies.
+    # adjusting similar_docs to similar_docs[:10] will only print 10
+    for doc_id, similarity in similar_docs:
+        if doc_id == "percy jackson  the olympians the lightning thief":
+            print("Document ID:", doc_id, "Similarity Score:", similarity)
+
+
+
+    # old code
+
+    # desc = input("Describe your movie, then press Enter: ").lower()
+    # desc1 = re.sub("[^a-z0-9' ]", "", desc)
+    #
+    # with warnings.catch_warnings(action="ignore"):
+    #     compute_spacy_similarity(movie_data, desc1)
+    #
+    # similarity_minimum = 0.6
+    # temp1 = movie_data[movie_data["similarity"] >= similarity_minimum]
+    # temp2 = temp1.sort_values(by=["similarity"], ascending=False)
+    # print("the top movies with a similarity greater than 0.6:", temp2[["movie_title", "similarity"]].head(10))
+    #
+    # input("\nPress Enter to Close.")
+
 
 
 def merge_features(dataframe, features):
