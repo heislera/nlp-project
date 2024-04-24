@@ -208,14 +208,16 @@ def main() -> None:
     # True at the end of this list tells the method that creates documents from our data to include review data
     movie_data_features = ["movie_title", "genres", "directors", "actors", "movie_info", "critics_consensus", True]
 
-    model = generate_model(critic_reviews, movie_data, movie_data_features)
+    # model = generate_model(critic_reviews, movie_data, movie_data_features)
 
+    training_df = pd.read_csv(f"data/movie_title_genres_directors_actors_movie_info_critics_consensus_WITH_REVIEWS.csv")
+    model = Doc2Vec.load("model.model")
 
     # below this is just testing the model
 
-    test_doc = critic_reviews.at[0, "review_content"]
-    print(movie_data[movie_data["rotten_tomatoes_link"] == critic_reviews.at[0, "rotten_tomatoes_link"]]["movie_title"])
-    print(test_doc)
+    test_doc = training_df.at[0, "merged_features"]
+    # print(movie_data[movie_data["rotten_tomatoes_link"] == critic_reviews.at[0, "rotten_tomatoes_link"]]["movie_title"])
+    # print(test_doc)
 
     # this is how we calculate similarity for an input doc
     tokenized_doc = word_tokenize(test_doc.lower())
@@ -255,7 +257,6 @@ def merge_features(dataframe, features):
     dataframe['merged_features'] = dataframe[features].apply(lambda row: ' '.join(str(val) for val in row if pd.notna(val)), axis=1)
 
 
-
 def compute_spacy_similarity(dataframe, input):
     # testing some stuff
     nlp = spacy.load("en_core_web_sm")
@@ -267,7 +268,6 @@ def compute_spacy_similarity(dataframe, input):
 
         if i % 300 == 0:
             print(i/dataframe["merged_features"].size)
-
 
 
 if __name__ == '__main__':
