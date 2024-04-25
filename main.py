@@ -11,13 +11,12 @@ import contractions
 import numpy as np
 from gensim.models.doc2vec import TaggedDocument, Doc2Vec
 from nltk import word_tokenize
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.ensemble import RandomForestClassifier
+
 
 pd.set_option('display.max_columns', None)
 nltk.download('punkt')
-
-
-
-
 
 def load_data():
     critic_reviews = pd.read_csv("data/rotten_tomatoes_critic_reviews.csv")
@@ -159,7 +158,7 @@ def create_training_data(critic_reviews, movie_data, features=None):
     movie_data.to_csv(f"data/{df_name}.csv")
     print("finished making movie documents")
 
-def train_model(features, vector_size=50, epochs=20):
+def train_similarity_model(features, vector_size=50, epochs=20):
     use_reviews = False
 
     if features[-1]:
@@ -194,7 +193,7 @@ def train_model(features, vector_size=50, epochs=20):
     return model
 def generate_model(critic_reviews, movie_data, features):
     create_training_data(critic_reviews, movie_data, features)
-    model = train_model(features)
+    model = train_similarity_model(features)
 
     return model
 
@@ -247,6 +246,38 @@ def main() -> None:
     #
     # input("\nPress Enter to Close.")
 
+
+def train_random_forest_model():
+    import time
+    """
+    Requires the following:
+    - A list of reviews
+    - labels for each reviews
+    - a list of keywords
+    """
+    reviews = []
+    keywords = []
+    labels = []
+
+    #todo maybe binary should be true, it's mentioned in the chatGPT thing im using as reference to this
+    vectorizer = CountVectorizer(vocabulary=keywords, binary=False)
+    X = vectorizer.fit_transform(reviews)
+
+    start_time = time.time()
+    rfc = RandomForestClassifier()
+    rfc.fit(X, labels)
+    print("random forest train time", time.time() - start_time)
+
+
+def extract_important_features(model, keywords):
+    feature_importances = model.feature_importances_
+
+    keyword_importance = dict(zip(keywords, feature_importances))
+
+    sorted_keywords = sorted(keyword_importance.items(), key=lambda x: x[1], reverse=True)
+
+    for keyword, importance in sorted_keywords:
+        print(f"{keyword}: {importance}")
 
 
 def merge_features(dataframe, features):
