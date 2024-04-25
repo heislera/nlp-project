@@ -1,1 +1,9 @@
 scipy>=1.4.1,<1.13.0
+gensim~=4.3.2
+nltk~=3.8.1
+pandas~=2.2.1
+spacy~=3.7.4
+contractions~=0.1.73
+numpy~=1.26.4
+yake~=0.4.8
+scikit-learn~=1.4.1.post1

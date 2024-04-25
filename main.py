@@ -1,6 +1,6 @@
 import os
+import random
 import string
-import warnings
 
 import gensim
 import nltk
@@ -8,15 +8,17 @@ import pandas as pd
 import re
 import spacy
 import contractions
-import numpy as np
 from gensim.models.doc2vec import TaggedDocument, Doc2Vec
 from nltk import word_tokenize
+import yake
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.ensemble import RandomForestClassifier
 
-
 pd.set_option('display.max_columns', None)
-nltk.download('punkt')
+
+if not nltk.data.find('tokenizers/punkt'):
+    nltk.download('punkt')
+
 
 def load_data():
     critic_reviews = pd.read_csv("data/rotten_tomatoes_critic_reviews.csv")
@@ -25,9 +27,10 @@ def load_data():
 
 
 def clean_movie_data(movie_data):
-    fields = ['movie_title', 'movie_info', 'content_rating', 'genres', 'directors', 'authors', 'actors', 'production_company']
+    fields = ['movie_title', 'movie_info', 'content_rating', 'genres', 'directors', 'authors', 'actors',
+              'production_company']
     for field in fields:
-        #movie_data = movie_data[movie_data[field].notnull()] # needed?
+        # movie_data = movie_data[movie_data[field].notnull()] # needed?
 
         # set content to lowercase
         movie_data[field] = movie_data[field].apply(lambda x: str(x).lower())
@@ -54,13 +57,13 @@ def clean_review_data(critic_reviews):
     return critic_reviews
 
 
-
-
 def decontract(word):
     return contractions.fix(word)
 
+
 def remove_punctuation(text):
     return text.translate(str.maketrans('', '', string.punctuation))
+
 
 def remove_contractions_from_reviews(critic_reviews):
     """
@@ -109,6 +112,7 @@ we may also dump reviews into this text blob:
 def get_reviews(critic_reviews, movie_link):
     return critic_reviews[critic_reviews["rotten_tomatoes_link"] == movie_link]
 
+
 def create_training_data(critic_reviews, movie_data, features=None):
     # this creates a file with the new cleaned and merged data column
     # this column is what is fed into models for training for similarity probably
@@ -153,10 +157,11 @@ def create_training_data(critic_reviews, movie_data, features=None):
             movie_data.at[index, "merged_features"] += " " + merged_reviews
 
             if index % 100 == 0:
-                print(index/movie_data.shape[0])
+                print(index / movie_data.shape[0])
 
     movie_data.to_csv(f"data/{df_name}.csv")
     print("finished making movie documents")
+
 
 def train_similarity_model(features, vector_size=50, epochs=20):
     use_reviews = False
@@ -191,11 +196,14 @@ def train_similarity_model(features, vector_size=50, epochs=20):
     print("finish training")
 
     return model
+
+
 def generate_model(critic_reviews, movie_data, features):
     create_training_data(critic_reviews, movie_data, features)
     model = train_similarity_model(features)
 
     return model
+
 
 def main() -> None:
     critic_reviews, movie_data = load_data()
@@ -207,7 +215,7 @@ def main() -> None:
     # True at the end of this list tells the method that creates documents from our data to include review data
     movie_data_features = ["movie_title", "genres", "directors", "actors", "movie_info", "critics_consensus", True]
 
-    # model = generate_model(critic_reviews, movie_data, movie_data_features)
+    #model = generate_model(critic_reviews, movie_data, movie_data_features)
 
     training_df = pd.read_csv(f"data/movie_title_genres_directors_actors_movie_info_critics_consensus_WITH_REVIEWS.csv")
     model = Doc2Vec.load("model.model")
@@ -231,6 +239,13 @@ def main() -> None:
 
 
 
+    # movie id for percy jackson TODO: get reviews for each movie_link in similar_docs
+    spec_reviews = get_reviews(critic_reviews, "m/0814255")
+    review_df = extract_review_keywords(spec_reviews)
+    #print(review_df)
+
+    train_random_forest_model(review_df)
+
     # old code
 
     # desc = input("Describe your movie, then press Enter: ").lower()
@@ -247,7 +262,7 @@ def main() -> None:
     # input("\nPress Enter to Close.")
 
 
-def train_random_forest_model():
+def train_random_forest_model(critic_reviews):
     import time
     """
     Requires the following:
@@ -255,11 +270,21 @@ def train_random_forest_model():
     - labels for each reviews
     - a list of keywords
     """
-    reviews = []
-    keywords = []
-    labels = []
+    reviews = critic_reviews["review_content"]
+    keywords = critic_reviews["keywords"]
 
-    #todo maybe binary should be true, it's mentioned in the chatGPT thing im using as reference to this
+    # Flatten the list of lists of keywords to a single list of strings
+    keywords = [keyword for sublist in keywords for keyword in sublist]
+
+    # Convert keywords to a set to remove duplicates, then put it back in a list
+    keywords = list(set(keywords))
+
+    labels = critic_reviews["label"]
+
+
+
+
+    # todo maybe binary should be true, it's mentioned in the chatGPT thing im using as reference to this
     vectorizer = CountVectorizer(vocabulary=keywords, binary=False)
     X = vectorizer.fit_transform(reviews)
 
@@ -282,12 +307,22 @@ def extract_important_features(model, keywords):
 
 def merge_features(dataframe, features):
     """
-    this method takes a dataframe and a list of it's features, and creates a new feature called "merged_features"
+    this method takes a dataframe and a list of its features, and creates a new feature called "merged_features"
     this features is simply a concatenated string of all non-nan features provided
     """
-    dataframe['merged_features'] = dataframe[features].apply(lambda row: ' '.join(str(val) for val in row if pd.notna(val)), axis=1)
+    dataframe['merged_features'] = dataframe[features].apply(
+        lambda row: ' '.join(str(val) for val in row if pd.notna(val)), axis=1)
 
 
+def merge_movie_review_features(percentage, critic_reviews):
+    # Takes a movie link and percentage of reviews to use, then returns string of reviews in random order
+    sample_size = int(len(critic_reviews) * percentage / 100)
+    rand_reviews = random.sample(critic_reviews["review_content"].toList(), sample_size)
+
+    return rand_reviews
+
+
+# Not in use anymore
 def compute_spacy_similarity(dataframe, input):
     # testing some stuff
     nlp = spacy.load("en_core_web_sm")
@@ -298,7 +333,29 @@ def compute_spacy_similarity(dataframe, input):
         dataframe.at[i, "similarity"] = doc.similarity(doc2)
 
         if i % 300 == 0:
-            print(i/dataframe["merged_features"].size)
+            print(i / dataframe["merged_features"].size)
+
+
+def extract_review_keywords(reviews):
+    data = []
+    for review, label in zip(reviews["review_content"], reviews["review_type"]):
+        yake_kw = yake.KeywordExtractor()
+        keywords = yake_kw.extract_keywords(review)
+
+        # Filter out single-word keywords - this is done because most of the single-word keywords
+        # aren't very helpful (ex. 'lightning', 'fantasy' were returned for percy jackson as important keywords)
+        keywords = [keyword[0] for keyword in keywords if " " in keyword[0]]
+
+        # Sort keywords based on their scores in descending order
+        keywords_sorted = sorted(keywords, key=lambda x: x[1], reverse=True)
+
+        # Get top 3 keyword phrases and append to dataframe
+        top_3_keywords = keywords_sorted[:3]
+        data.append({'label': label, 'review_content': str(review), 'keywords': top_3_keywords})
+
+    review_df = pd.DataFrame(data)
+
+    return review_df
 
 
 if __name__ == '__main__':
