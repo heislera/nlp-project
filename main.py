@@ -13,6 +13,8 @@ from nltk import word_tokenize
 import yake
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.ensemble import RandomForestClassifier
+import matplotlib.pyplot as plt
+import numpy as np
 
 pd.set_option('display.max_columns', None)
 
@@ -244,23 +246,9 @@ def main() -> None:
     review_df = extract_review_keywords(spec_reviews)
     #print(review_df)
 
-    train_random_forest_model(review_df)
+    rfm = train_random_forest_model(review_df)
 
-    # old code
-
-    # desc = input("Describe your movie, then press Enter: ").lower()
-    # desc1 = re.sub("[^a-z0-9' ]", "", desc)
-    #
-    # with warnings.catch_warnings(action="ignore"):
-    #     compute_spacy_similarity(movie_data, desc1)
-    #
-    # similarity_minimum = 0.6
-    # temp1 = movie_data[movie_data["similarity"] >= similarity_minimum]
-    # temp2 = temp1.sort_values(by=["similarity"], ascending=False)
-    # print("the top movies with a similarity greater than 0.6:", temp2[["movie_title", "similarity"]].head(10))
-    #
-    # input("\nPress Enter to Close.")
-
+    extract_important_features(rfm, review_df["keywords"])
 
 def train_random_forest_model(critic_reviews):
     import time
@@ -273,8 +261,10 @@ def train_random_forest_model(critic_reviews):
     reviews = critic_reviews["review_content"]
     keywords = critic_reviews["keywords"]
 
+    temp = [",".join(sublist) for sublist in keywords]
     # Flatten the list of lists of keywords to a single list of strings
     keywords = [keyword for sublist in keywords for keyword in sublist]
+
 
     # Convert keywords to a set to remove duplicates, then put it back in a list
     keywords = list(set(keywords))
@@ -294,10 +284,56 @@ def train_random_forest_model(critic_reviews):
     print("random forest train time", time.time() - start_time)
 
 
-def extract_important_features(model, keywords):
-    feature_importances = model.feature_importances_
 
-    keyword_importance = dict(zip(keywords, feature_importances))
+    #
+    # import numpy as np
+    #
+    # importances = rfc.feature_importances_
+    # std = np.std([tree.feature_importances_ for tree in rfc.estimators_], axis=0)
+    #
+    # d = {"importances": importances, "std": std}
+    # forest_importances = pd.DataFrame(d, index=keywords)
+    # forest_importances.sort_values(by="importances", ascending=False, inplace=True)
+    # forest_importances = forest_importances[:10]
+    #
+    # fig, ax = plt.subplots()
+    # forest_importances["importances"].plot.bar(yerr=forest_importances["std"], ax=ax)
+    # ax.set_title("Feature importances using MDI")
+    # ax.set_ylabel("Mean decrease in impurity")
+    # fig.tight_layout()
+    # plt.show()
+
+
+    return rfc
+
+
+def extract_important_features(model, keywords):
+
+    # Flatten the list of lists of keywords to a single list of strings
+    keywords = [keyword for sublist in keywords for keyword in sublist]
+
+    # Convert keywords to a set to remove duplicates, then put it back in a list
+    keywords = list(set(keywords))
+    importances = model.feature_importances_
+
+    # TODO: uncomment the below to show a plot of the top 10
+    # num_to_show = 10
+    # std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
+    #
+    # d = {"importances": importances, "std": std}
+    # forest_importances = pd.DataFrame(d, index=keywords)
+    # forest_importances.sort_values(by="importances", ascending=False, inplace=True)
+    # forest_importances = forest_importances[:num_to_show]
+    #
+    # fig, ax = plt.subplots()
+    # forest_importances["importances"].plot.bar(yerr=forest_importances["std"], ax=ax)
+    # ax.set_title("Feature importances using MDI")
+    # ax.set_ylabel("Mean decrease in impurity")
+    # fig.tight_layout()
+    # plt.show()
+
+    # print importances next to keywords
+    keyword_importance = dict(zip(keywords, importances))
 
     sorted_keywords = sorted(keyword_importance.items(), key=lambda x: x[1], reverse=True)
 
@@ -344,7 +380,7 @@ def extract_review_keywords(reviews):
 
         # Filter out single-word keywords - this is done because most of the single-word keywords
         # aren't very helpful (ex. 'lightning', 'fantasy' were returned for percy jackson as important keywords)
-        keywords = [keyword[0] for keyword in keywords if " " in keyword[0]]
+        keywords = [keyword[0] for keyword in keywords if " " not in keyword[0]]
 
         # Sort keywords based on their scores in descending order
         keywords_sorted = sorted(keywords, key=lambda x: x[1], reverse=True)
