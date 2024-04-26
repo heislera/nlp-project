@@ -251,7 +251,7 @@ def main() -> None:
 
     rfm = train_random_forest_model(review_df)
 
-    extract_important_features(rfm, review_df["keywords"])
+    # extract_important_features(rfm, review_df["keywords"])
 
 def train_random_forest_model(critic_reviews):
     import time
@@ -264,7 +264,6 @@ def train_random_forest_model(critic_reviews):
     reviews = critic_reviews["review_content"]
     keywords = critic_reviews["keywords"]
 
-    temp = [",".join(sublist) for sublist in keywords]
     # Flatten the list of lists of keywords to a single list of strings
     keywords = [keyword for sublist in keywords for keyword in sublist]
 
@@ -282,13 +281,18 @@ def train_random_forest_model(critic_reviews):
     X = vectorizer.fit_transform(reviews)
 
     start_time = time.time()
-    rfc = RandomForestClassifier()
+    rfc = RandomForestClassifier(n_estimators=3)
     rfc.fit(X, labels)
     print("random forest train time", time.time() - start_time)
 
+    from sklearn.metrics import accuracy_score
+    y_pred_test = rfc.predict(X)
+    test = accuracy_score(labels, y_pred_test)
+    print(test)
+
     generate_plot(keywords, rfc)
 
-    generate_wordCloud(keywords)
+    # generate_wordCloud(keywords)
 
     return rfc
 
@@ -320,29 +324,12 @@ def generate_wordCloud(keywords):
 
 
 def extract_important_features(model, keywords):
-
     # Flatten the list of lists of keywords to a single list of strings
     keywords = [keyword for sublist in keywords for keyword in sublist]
 
     # Convert keywords to a set to remove duplicates, then put it back in a list
     keywords = list(set(keywords))
     importances = model.feature_importances_
-
-    # TODO: uncomment the below to show a plot of the top 10
-    # num_to_show = 10
-    # std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
-    #
-    # d = {"importances": importances, "std": std}
-    # forest_importances = pd.DataFrame(d, index=keywords)
-    # forest_importances.sort_values(by="importances", ascending=False, inplace=True)
-    # forest_importances = forest_importances[:num_to_show]
-    #
-    # fig, ax = plt.subplots()
-    # forest_importances["importances"].plot.bar(yerr=forest_importances["std"], ax=ax)
-    # ax.set_title("Feature importances using MDI")
-    # ax.set_ylabel("Mean decrease in impurity")
-    # fig.tight_layout()
-    # plt.show()
 
     # print importances next to keywords
     keyword_importance = dict(zip(keywords, importances))
