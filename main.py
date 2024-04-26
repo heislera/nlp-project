@@ -14,6 +14,7 @@ import yake
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.ensemble import RandomForestClassifier
 import matplotlib
+
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,10 +25,21 @@ pd.set_option('display.max_columns', None)
 if not nltk.data.find('tokenizers/punkt'):
     nltk.download('punkt')
 
+global movie_titles_id
+
 
 def load_data():
+    global movie_titles_ids
     critic_reviews = pd.read_csv("data/rotten_tomatoes_critic_reviews.csv")
     movie_data = pd.read_csv("data/rotten_tomatoes_movies.csv")
+
+    # This is done so we can access the unedited movie titles later (to display to user)
+    # Extract movie titles and links
+    movie_titles = movie_data["movie_title"]
+    rotten_tomatoes_links = movie_data["rotten_tomatoes_link"]
+    # Combine titles and links into a DataFrame
+    movie_titles_ids = pd.DataFrame({"movie_title": movie_titles, "rotten_tomatoes_link": rotten_tomatoes_links})
+
     return critic_reviews, movie_data
 
 
@@ -118,6 +130,10 @@ def get_reviews(critic_reviews, movie_link):
     return critic_reviews[critic_reviews["rotten_tomatoes_link"] == movie_link]
 
 
+def get_movie_title(movie_link):  # helper method to get unedited movie title from doc_id
+    return movie_titles_ids[movie_titles_ids["rotten_tomatoes_link"] == movie_link]["movie_title"].iloc[0]
+
+
 def create_training_data(critic_reviews, movie_data, features=None):
     # this creates a file with the new cleaned and merged data column
     # this column is what is fed into models for training for similarity probably
@@ -186,7 +202,7 @@ def train_similarity_model(features, vector_size=50, epochs=20):
     print("begin making tagged data for model training")
     for index, row in training_df.iterrows():
         tagged_doc = TaggedDocument(words=word_tokenize(row.merged_features),
-                                    tags=[str(row.movie_title)])
+                                    tags=[row.rotten_tomatoes_link])
         tagged_data.append(tagged_doc)
     print("finish making tagged data for model training")
 
@@ -220,16 +236,18 @@ def main() -> None:
     # True at the end of this list tells the method that creates documents from our data to include review data
     movie_data_features = ["movie_title", "genres", "directors", "actors", "movie_info", "critics_consensus", True]
 
-    #model = generate_model(critic_reviews, movie_data, movie_data_features)
+    # check if the model exists, generate one if it doesn't
+    if os.path.exists("model.model"):
+        model = Doc2Vec.load("model.model")
+    else:
+        model = generate_model(critic_reviews, movie_data, movie_data_features)
+        model.save("model.model")
 
     training_df = pd.read_csv(f"data/movie_title_genres_directors_actors_movie_info_critics_consensus_WITH_REVIEWS.csv")
-    model = Doc2Vec.load("model.model")
 
     # below this is just testing the model
 
     test_doc = training_df.at[0, "merged_features"]
-    # print(movie_data[movie_data["rotten_tomatoes_link"] == critic_reviews.at[0, "rotten_tomatoes_link"]]["movie_title"])
-    # print(test_doc)
 
     # this is how we calculate similarity for an input doc
     tokenized_doc = word_tokenize(test_doc.lower())
@@ -242,16 +260,23 @@ def main() -> None:
         if doc_id == "percy jackson  the olympians the lightning thief":
             print("Document ID:", doc_id, "Similarity Score:", similarity)
 
+    review_data = []
 
+    # for now, the keywords are extracted from only the top 5 movies (similarity scores)
+    for doc_id, similarity in similar_docs[:5]:
+        movie_title = get_movie_title(doc_id)
+        print("Similar movie: ", movie_title, "\tSimilarity Score: ", similarity)
+        spec_reviews = get_reviews(critic_reviews, str(doc_id))
+        keyword_df = extract_review_keywords(spec_reviews)
+        review_data.append(keyword_df)
 
-    # movie id for percy jackson TODO: get reviews for each movie_link in similar_docs
-    spec_reviews = get_reviews(critic_reviews, "m/0814255")
-    review_df = extract_review_keywords(spec_reviews)
-    #print(review_df)
+    # Concatenate the dataframes generated in the loop above
+    review_df = pd.concat(review_data, ignore_index=True)
 
     rfm = train_random_forest_model(review_df)
 
-    # extract_important_features(rfm, review_df["keywords"])
+    extract_important_features(rfm, review_df["keywords"])
+
 
 def train_random_forest_model(critic_reviews):
     import time
@@ -267,14 +292,10 @@ def train_random_forest_model(critic_reviews):
     # Flatten the list of lists of keywords to a single list of strings
     keywords = [keyword for sublist in keywords for keyword in sublist]
 
-
     # Convert keywords to a set to remove duplicates, then put it back in a list
     keywords = list(set(keywords))
 
     labels = critic_reviews["label"]
-
-
-
 
     # todo maybe binary should be true, it's mentioned in the chatGPT thing im using as reference to this
     vectorizer = CountVectorizer(vocabulary=keywords, binary=False)
@@ -291,8 +312,6 @@ def train_random_forest_model(critic_reviews):
     print(test)
 
     generate_plot(keywords, rfc)
-
-    # generate_wordCloud(keywords)
 
     return rfc
 
@@ -313,13 +332,16 @@ def generate_plot(keywords, rfc):
     plt.show()
 
 
-def generate_wordCloud(keywords):
-    # Generate WordCloud
-    wordcloud = WordCloud().generate(' '.join(keywords))
-    # Display the WordCloud
-    plt.figure(figsize=(10, 10))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis('off')
+def generate_wordcloud(keyword_importance):
+    # Convert list of tuples to dictionary
+    keyword_importance_dict = dict(keyword_importance)
+
+    wordcloud = WordCloud(width=800, height=400, background_color="black")
+    wordcloud.generate_from_frequencies(keyword_importance_dict)
+
+    plt.figure(figsize=(10, 5))
+    plt.imshow(wordcloud, interpolation="bilinear")
+    plt.axis("off")
     plt.show()
 
 
@@ -338,6 +360,8 @@ def extract_important_features(model, keywords):
 
     for keyword, importance in sorted_keywords:
         print(f"{keyword}: {importance}")
+
+    generate_wordcloud(keyword_importance)
 
 
 def merge_features(dataframe, features):
@@ -358,17 +382,17 @@ def merge_movie_review_features(percentage, critic_reviews):
 
 
 # Not in use anymore
-def compute_spacy_similarity(dataframe, input):
-    # testing some stuff
-    nlp = spacy.load("en_core_web_sm")
-    doc = nlp(input)
-    dataframe['similarity'] = 0.0
-    for i in range(dataframe["merged_features"].size):
-        doc2 = nlp(dataframe["merged_features"].iloc[i])
-        dataframe.at[i, "similarity"] = doc.similarity(doc2)
-
-        if i % 300 == 0:
-            print(i / dataframe["merged_features"].size)
+# def compute_spacy_similarity(dataframe, input):
+#     # testing some stuff
+#     nlp = spacy.load("en_core_web_sm")
+#     doc = nlp(input)
+#     dataframe['similarity'] = 0.0
+#     for i in range(dataframe["merged_features"].size):
+#         doc2 = nlp(dataframe["merged_features"].iloc[i])
+#         dataframe.at[i, "similarity"] = doc.similarity(doc2)
+#
+#         if i % 300 == 0:
+#             print(i / dataframe["merged_features"].size)
 
 
 def extract_review_keywords(reviews):
