@@ -1,18 +1,22 @@
 import os
 import random
 import string
+import time
+from collections import defaultdict
+from nltk.corpus import stopwords
 
 import gensim
 import nltk
 import pandas as pd
 import re
-import spacy
 import contractions
 from gensim.models.doc2vec import TaggedDocument, Doc2Vec
 from nltk import word_tokenize
 import yake
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+
 import matplotlib
 
 matplotlib.use('TkAgg')
@@ -22,8 +26,15 @@ from wordcloud import WordCloud
 
 pd.set_option('display.max_columns', None)
 
-if not nltk.data.find('tokenizers/punkt'):
-    nltk.download('punkt')
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download("punkt")
+
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download("stopwords")
 
 global movie_titles_id
 
@@ -226,7 +237,6 @@ def generate_model(critic_reviews, movie_data, features):
     return model
 
 def train_random_forest_model(critic_reviews):
-    import time
     """
     Requires the following:
     - A list of reviews
@@ -253,18 +263,19 @@ def train_random_forest_model(critic_reviews):
     rfc.fit(X, labels)
     print("random forest train time", time.time() - start_time)
 
-    from sklearn.metrics import accuracy_score
     y_pred_test = rfc.predict(X)
     test = accuracy_score(labels, y_pred_test)
     print(test)
-
-    generate_plot(keywords, rfc)
 
     return rfc
 
 
 def generate_plot(keywords, rfc):
-    import numpy as np
+    keywords = [keyword for sublist in keywords for keyword in sublist]
+
+    # Convert keywords to a set to remove duplicates, then put it back in a list
+    keywords = list(set(keywords))
+
     importances = rfc.feature_importances_
     std = np.std([tree.feature_importances_ for tree in rfc.estimators_], axis=0)
     d = {"importances": importances, "std": std}
@@ -305,10 +316,11 @@ def extract_important_features(model, keywords):
 
     sorted_keywords = sorted(keyword_importance.items(), key=lambda x: x[1], reverse=True)
 
-    for keyword, importance in sorted_keywords:
-        print(f"{keyword}: {importance}")
+    # for keyword, importance in sorted_keywords:
+    #     print(f"{keyword}: {importance}")
 
-    generate_wordcloud(keyword_importance)
+    return sorted_keywords
+
 
 
 def merge_features(dataframe, features):
@@ -327,23 +339,9 @@ def merge_movie_review_features(percentage, critic_reviews):
 
     return rand_reviews
 
-
-# Not in use anymore
-# def compute_spacy_similarity(dataframe, input):
-#     # testing some stuff
-#     nlp = spacy.load("en_core_web_sm")
-#     doc = nlp(input)
-#     dataframe['similarity'] = 0.0
-#     for i in range(dataframe["merged_features"].size):
-#         doc2 = nlp(dataframe["merged_features"].iloc[i])
-#         dataframe.at[i, "similarity"] = doc.similarity(doc2)
-#
-#         if i % 300 == 0:
-#             print(i / dataframe["merged_features"].size)
-
-
-def extract_review_keywords(reviews):
+def extract_review_keywords(reviews, num_keywords=3):
     data = []
+
     for review, label in zip(reviews["review_content"], reviews["review_type"]):
         yake_kw = yake.KeywordExtractor()
         keywords = yake_kw.extract_keywords(review)
@@ -355,13 +353,36 @@ def extract_review_keywords(reviews):
         # Sort keywords based on their scores in descending order
         keywords_sorted = sorted(keywords, key=lambda x: x[1], reverse=True)
 
-        # Get top 3 keyword phrases and append to dataframe
-        top_3_keywords = keywords_sorted[:3]
-        data.append({'label': label, 'review_content': str(review), 'keywords': top_3_keywords})
+        # Get top n keyword phrases and append to dataframe
+        top_n_keywords = keywords_sorted[:num_keywords]
+        data.append({'label': label, 'review_content': str(review), 'keywords': top_n_keywords})
 
     review_df = pd.DataFrame(data)
 
     return review_df
+
+
+def co_occurrence_analysis(text_series, keyword, window_size=3):
+    co_occurrence_matrix = defaultdict(lambda: defaultdict(int))
+    stop_words = set(stopwords.words('english'))
+
+    for text in text_series:
+        # Tokenize the text
+        tokens = nltk.word_tokenize(text.lower())
+
+        # Create a co-occurrence matrix for each text in the series
+        for i in range(len(tokens)):
+            # Find keyword in token list
+            if tokens[i] == keyword:
+                # Calculate window index around the keyword
+                for j in range(max(0, i - window_size), min(len(tokens), i + window_size + 1)):
+                    # Ignore the keyword and stop words
+                    if i != j and tokens[j] not in stop_words:
+                        co_occurrence_matrix[keyword][tokens[j]] += 1
+
+    # Sort the co-occurrence dictionary by counts in descending order
+    sorted_co_occurrences = dict(sorted(co_occurrence_matrix[keyword].items(), key=lambda x: x[1], reverse=True))
+    return sorted_co_occurrences
 
 def main() -> None:
     critic_reviews, movie_data = load_data()
@@ -400,7 +421,8 @@ def main() -> None:
     review_data = []
 
     # for now, the keywords are extracted from only the top 5 movies (similarity scores)
-    for doc_id, similarity in similar_docs[:5]:
+    num_similar_movies = 5
+    for doc_id, similarity in similar_docs[:num_similar_movies]:
         movie_title = get_movie_title(doc_id)
         print("Similar movie: ", movie_title, "\tSimilarity Score: ", similarity)
         spec_reviews = get_reviews(critic_reviews, str(doc_id))
@@ -412,7 +434,19 @@ def main() -> None:
 
     rfm = train_random_forest_model(review_df)
 
-    extract_important_features(rfm, review_df["keywords"])
+    sorted_keywords = extract_important_features(rfm, review_df["keywords"])
+
+    # generate_plot(review_df["keywords"], rfm)
+    # generate_wordcloud(sorted_keywords)
+
+    # print co occurrences
+    num_words = 10
+    for keyword_tuple in sorted_keywords[:5]:
+        word = keyword_tuple[0]
+        co_occurrence = co_occurrence_analysis(review_df["review_content"], word)
+        top_words = [(k,v) for k, v in co_occurrence.items()][:num_words]
+        print(keyword_tuple, top_words)
+
 
 
 if __name__ == '__main__':
