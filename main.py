@@ -258,14 +258,8 @@ def train_random_forest_model(critic_reviews):
     vectorizer = CountVectorizer(vocabulary=keywords, binary=False)
     X = vectorizer.fit_transform(reviews)
 
-    start_time = time.time()
     rfc = RandomForestClassifier(n_estimators=3)
     rfc.fit(X, labels)
-    print("random forest train time", time.time() - start_time)
-
-    y_pred_test = rfc.predict(X)
-    test = accuracy_score(labels, y_pred_test)
-    print(test)
 
     return rfc
 
@@ -315,9 +309,6 @@ def extract_important_features(model, keywords):
     keyword_importance = dict(zip(keywords, importances))
 
     sorted_keywords = sorted(keyword_importance.items(), key=lambda x: x[1], reverse=True)
-
-    # for keyword, importance in sorted_keywords:
-    #     print(f"{keyword}: {importance}")
 
     return sorted_keywords
 
@@ -410,13 +401,7 @@ def main() -> None:
     # this is how we calculate similarity for an input doc
     tokenized_doc = word_tokenize(test_doc.lower())
     inferred_vector = model.infer_vector(tokenized_doc)
-    similar_docs = model.docvecs.most_similar([inferred_vector], topn=len(model.docvecs))
-
-    # the test doc is the very first movie, removing this check will similarity to all movies.
-    # adjusting similar_docs to similar_docs[:10] will only print 10
-    # for doc_id, similarity in similar_docs:
-    #     if doc_id == "percy jackson  the olympians the lightning thief":
-    #         print("Document ID:", doc_id, "Similarity Score:", similarity)
+    similar_docs = model.dv.most_similar([inferred_vector], topn=len(model.dv))
 
     review_data = []
 
