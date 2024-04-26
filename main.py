@@ -433,7 +433,7 @@ def main() -> None:
     co_word_count = 10
     for keyword_tuple in sorted_keywords[:keyword_count]:
         word = keyword_tuple[0]
-        co_occurrence = co_occurrence_analysis(review_df[review_df["label"] == "Fresh"]["review_content"], word)
+        co_occurrence = co_occurrence_analysis(review_df[review_df["label"]]["review_content"], word)
         top_words = [(k,v) for k, v in co_occurrence.items()][:co_word_count]
         print(keyword_tuple, top_words)
 
