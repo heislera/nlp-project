@@ -37,6 +37,13 @@ except LookupError:
     nltk.download("stopwords")
 
 global movie_titles_id
+filter_keywords = [
+    "movie", "film", "good", "bad", "great",
+    "awesome", "awful", "nice", "interesting", "amazing",
+    "terrible", "okay", "fine", "enough", "like",
+    "dislike", "love", "hate", "best", "worst",
+    "plot", "story", "character", "watch", "time", "seen"
+]
 
 
 def load_data():
@@ -236,6 +243,7 @@ def generate_model(critic_reviews, movie_data, features):
 
     return model
 
+
 def train_random_forest_model(critic_reviews):
     """
     Requires the following:
@@ -265,6 +273,7 @@ def train_random_forest_model(critic_reviews):
 
 
 def generate_plot(keywords, rfc):
+    # keywords = [keyword for sublist in keywords for keyword in sublist if keyword not in filter_keywords] # filters out 'useless words'
     keywords = [keyword for sublist in keywords for keyword in sublist]
 
     # Convert keywords to a set to remove duplicates, then put it back in a list
@@ -284,25 +293,55 @@ def generate_plot(keywords, rfc):
     plt.show()
 
 
+# old method for generating word cloud of only keywords instead of keywords and their co-occurrences
+# def generate_wordcloud(keyword_importance):
+#     # Convert list of tuples to dictionary
+#     keyword_importance_dict = dict(keyword_importance)
+#
+#     wordcloud = WordCloud(width=800, height=400, background_color="black")
+#     wordcloud.generate_from_frequencies(keyword_importance_dict)
+#
+#     plt.figure(figsize=(10, 5))
+#     plt.imshow(wordcloud, interpolation="bilinear")
+#     plt.axis("off")
+#     plt.show()
+
 def generate_wordcloud(keyword_importance):
-    # Convert list of tuples to dictionary
-    keyword_importance_dict = dict(keyword_importance)
+    num_keywords = len(keyword_importance)
+    cols = 3  # Number of cols in the grid
+    rows = (num_keywords // cols) + (1 if num_keywords % cols != 0 else 0)  # Number of rows in the grid
 
-    wordcloud = WordCloud(width=800, height=400, background_color="black")
-    wordcloud.generate_from_frequencies(keyword_importance_dict)
+    plt.figure(figsize=(15, 5 * rows))  # Adjust the window to fit all word clouds
 
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wordcloud, interpolation="bilinear")
-    plt.axis("off")
+    for i, (keyword, co_occurrences) in enumerate(keyword_importance, 1):
+        wordcloud_data = {keyword: max([freq for _, freq in co_occurrences])}
+
+        for co_word, freq in co_occurrences:
+            wordcloud_data[co_word] = freq / max([freq for _, freq in co_occurrences])
+
+            # subplot for each keyword
+            plt.subplot(rows, cols, i)
+
+            # adjust w/h based on the number of words and their frequencies
+            wordcloud = WordCloud(width=len(wordcloud_data) * 50, height=len(wordcloud_data) * 25,
+                                  background_color="black")
+            wordcloud.generate_from_frequencies(wordcloud_data)
+
+            plt.imshow(wordcloud, interpolation="bilinear")
+            plt.axis("off")
+
+    plt.tight_layout()
     plt.show()
 
 
 def extract_important_features(model, keywords):
     # Flatten the list of lists of keywords to a single list of strings
+    # keywords = [keyword for sublist in keywords for keyword in sublist if keyword not in filter_keywords] # filters out 'useless words'
     keywords = [keyword for sublist in keywords for keyword in sublist]
 
     # Convert keywords to a set to remove duplicates, then put it back in a list
     keywords = list(set(keywords))
+
     importances = model.feature_importances_
 
     # print importances next to keywords
@@ -311,7 +350,6 @@ def extract_important_features(model, keywords):
     sorted_keywords = sorted(keyword_importance.items(), key=lambda x: x[1], reverse=True)
 
     return sorted_keywords
-
 
 
 def merge_features(dataframe, features):
@@ -329,6 +367,7 @@ def merge_movie_review_features(percentage, critic_reviews):
     rand_reviews = random.sample(critic_reviews["review_content"].toList(), sample_size)
 
     return rand_reviews
+
 
 def extract_review_keywords(reviews, num_keywords=3):
     data = []
@@ -371,10 +410,10 @@ def co_occurrence_analysis(text_series, keyword, window_size=3):
                     if i != j and tokens[j] not in stop_words:
                         co_occurrence_matrix[keyword][tokens[j]] += 1
 
-
     # Sort the co-occurrence dictionary by counts in descending order
     sorted_co_occurrences = dict(sorted(co_occurrence_matrix[keyword].items(), key=lambda x: x[1], reverse=True))
     return sorted_co_occurrences
+
 
 def main() -> None:
     critic_reviews, movie_data = load_data()
@@ -426,7 +465,9 @@ def main() -> None:
     sorted_keywords = extract_important_features(rfm, review_df["keywords"])
 
     # generate_plot(review_df["keywords"], rfm)
-    # generate_wordcloud(sorted_keywords)
+    # generate_wordcloud(sorted_keywords) # old method for generating a wordcloud of just keywords
+
+    keyword_and_co_occurrences = []
 
     # print co occurrences
     keyword_count = 10
@@ -434,9 +475,11 @@ def main() -> None:
     for keyword_tuple in sorted_keywords[:keyword_count]:
         word = keyword_tuple[0]
         co_occurrence = co_occurrence_analysis(review_df["review_content"], word)
-        top_words = [(k,v) for k, v in co_occurrence.items()][:co_word_count]
+        top_words = [(k, v) for k, v in co_occurrence.items()][:co_word_count]
         print(keyword_tuple, top_words)
-
+        if len(top_words) > 1:  # make sure there's enough words to generate a word cloud
+            keyword_and_co_occurrences.append((word, top_words))
+    generate_wordcloud(keyword_and_co_occurrences)
 
 
 if __name__ == '__main__':
