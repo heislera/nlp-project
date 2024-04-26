@@ -425,11 +425,12 @@ def main() -> None:
     # generate_wordcloud(sorted_keywords)
 
     # print co occurrences
-    num_words = 10
-    for keyword_tuple in sorted_keywords[:5]:
+    keyword_count = 5
+    co_word_count = 10
+    for keyword_tuple in sorted_keywords[:keyword_count]:
         word = keyword_tuple[0]
         co_occurrence = co_occurrence_analysis(review_df["review_content"], word)
-        top_words = [(k,v) for k, v in co_occurrence.items()][:num_words]
+        top_words = [(k,v) for k, v in co_occurrence.items()][:co_word_count]
         print(keyword_tuple, top_words)
 
 
