@@ -184,7 +184,7 @@ def create_training_data(critic_reviews, movie_data, features=None):
     print("finished making movie documents")
 
 
-def train_similarity_model(features, vector_size=50, epochs=20):
+def train_similarity_model(features, vector_size=100, epochs=20):
     use_reviews = False
 
     if features[-1]:
@@ -208,7 +208,7 @@ def train_similarity_model(features, vector_size=50, epochs=20):
 
     print("begin training")
     # docs for this are here https://radimrehurek.com/gensim/models/doc2vec.html
-    model = gensim.models.doc2vec.Doc2Vec(vector_size=vector_size, min_count=2, epochs=epochs)
+    model = gensim.models.doc2vec.Doc2Vec(vector_size=vector_size, epochs=epochs)
 
     model.build_vocab(tagged_data)
 
@@ -224,59 +224,6 @@ def generate_model(critic_reviews, movie_data, features):
     model = train_similarity_model(features)
 
     return model
-
-
-def main() -> None:
-    critic_reviews, movie_data = load_data()
-
-    # for some reason this needs to be assigned
-    critic_reviews = clean_review_data(critic_reviews)
-    clean_movie_data(movie_data)
-
-    # True at the end of this list tells the method that creates documents from our data to include review data
-    movie_data_features = ["movie_title", "genres", "directors", "actors", "movie_info", "critics_consensus", True]
-
-    # check if the model exists, generate one if it doesn't
-    if os.path.exists("model.model"):
-        model = Doc2Vec.load("model.model")
-    else:
-        model = generate_model(critic_reviews, movie_data, movie_data_features)
-        model.save("model.model")
-
-    training_df = pd.read_csv(f"data/movie_title_genres_directors_actors_movie_info_critics_consensus_WITH_REVIEWS.csv")
-
-    # below this is just testing the model
-
-    test_doc = training_df.at[0, "merged_features"]
-
-    # this is how we calculate similarity for an input doc
-    tokenized_doc = word_tokenize(test_doc.lower())
-    inferred_vector = model.infer_vector(tokenized_doc)
-    similar_docs = model.docvecs.most_similar([inferred_vector], topn=len(model.docvecs))
-
-    # the test doc is the very first movie, removing this check will similarity to all movies.
-    # adjusting similar_docs to similar_docs[:10] will only print 10
-    for doc_id, similarity in similar_docs:
-        if doc_id == "percy jackson  the olympians the lightning thief":
-            print("Document ID:", doc_id, "Similarity Score:", similarity)
-
-    review_data = []
-
-    # for now, the keywords are extracted from only the top 5 movies (similarity scores)
-    for doc_id, similarity in similar_docs[:5]:
-        movie_title = get_movie_title(doc_id)
-        print("Similar movie: ", movie_title, "\tSimilarity Score: ", similarity)
-        spec_reviews = get_reviews(critic_reviews, str(doc_id))
-        keyword_df = extract_review_keywords(spec_reviews)
-        review_data.append(keyword_df)
-
-    # Concatenate the dataframes generated in the loop above
-    review_df = pd.concat(review_data, ignore_index=True)
-
-    rfm = train_random_forest_model(review_df)
-
-    extract_important_features(rfm, review_df["keywords"])
-
 
 def train_random_forest_model(critic_reviews):
     import time
@@ -415,6 +362,57 @@ def extract_review_keywords(reviews):
     review_df = pd.DataFrame(data)
 
     return review_df
+
+def main() -> None:
+    critic_reviews, movie_data = load_data()
+
+    # for some reason this needs to be assigned
+    critic_reviews = clean_review_data(critic_reviews)
+    clean_movie_data(movie_data)
+
+    # True at the end of this list tells the method that creates documents from our data to include review data
+    movie_data_features = ["movie_title", "genres", "directors", "actors", "movie_info", "critics_consensus", True]
+
+    # check if the model exists, generate one if it doesn't
+    if os.path.exists("model.model"):
+        model = Doc2Vec.load("model.model")
+    else:
+        model = generate_model(critic_reviews, movie_data, movie_data_features)
+        model.save("model.model")
+
+    training_df = pd.read_csv(f"data/movie_title_genres_directors_actors_movie_info_critics_consensus_WITH_REVIEWS.csv")
+
+    # below this is just testing the model
+
+    test_doc = training_df.at[0, "merged_features"]
+
+    # this is how we calculate similarity for an input doc
+    tokenized_doc = word_tokenize(test_doc.lower())
+    inferred_vector = model.infer_vector(tokenized_doc)
+    similar_docs = model.docvecs.most_similar([inferred_vector], topn=len(model.docvecs))
+
+    # the test doc is the very first movie, removing this check will similarity to all movies.
+    # adjusting similar_docs to similar_docs[:10] will only print 10
+    # for doc_id, similarity in similar_docs:
+    #     if doc_id == "percy jackson  the olympians the lightning thief":
+    #         print("Document ID:", doc_id, "Similarity Score:", similarity)
+
+    review_data = []
+
+    # for now, the keywords are extracted from only the top 5 movies (similarity scores)
+    for doc_id, similarity in similar_docs[:5]:
+        movie_title = get_movie_title(doc_id)
+        print("Similar movie: ", movie_title, "\tSimilarity Score: ", similarity)
+        spec_reviews = get_reviews(critic_reviews, str(doc_id))
+        keyword_df = extract_review_keywords(spec_reviews)
+        review_data.append(keyword_df)
+
+    # Concatenate the dataframes generated in the loop above
+    review_df = pd.concat(review_data, ignore_index=True)
+
+    rfm = train_random_forest_model(review_df)
+
+    extract_important_features(rfm, review_df["keywords"])
 
 
 if __name__ == '__main__':
