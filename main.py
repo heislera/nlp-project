@@ -371,6 +371,7 @@ def co_occurrence_analysis(text_series, keyword, window_size=3):
                     if i != j and tokens[j] not in stop_words:
                         co_occurrence_matrix[keyword][tokens[j]] += 1
 
+
     # Sort the co-occurrence dictionary by counts in descending order
     sorted_co_occurrences = dict(sorted(co_occurrence_matrix[keyword].items(), key=lambda x: x[1], reverse=True))
     return sorted_co_occurrences
@@ -403,11 +404,14 @@ def main() -> None:
     inferred_vector = model.infer_vector(tokenized_doc)
     similar_docs = model.dv.most_similar([inferred_vector], topn=len(model.dv))
 
+    min_similarity = 0.7
+    filtered_similarity = list(filter(lambda x: x[1] >= min_similarity, similar_docs))
+
     review_data = []
 
     # for now, the keywords are extracted from only the top 5 movies (similarity scores)
-    num_similar_movies = 5
-    for doc_id, similarity in similar_docs[:num_similar_movies]:
+    # num_similar_movies = 5
+    for doc_id, similarity in filtered_similarity:
         movie_title = get_movie_title(doc_id)
         print("Similar movie: ", movie_title, "\tSimilarity Score: ", similarity)
         spec_reviews = get_reviews(critic_reviews, str(doc_id))
@@ -425,11 +429,11 @@ def main() -> None:
     # generate_wordcloud(sorted_keywords)
 
     # print co occurrences
-    keyword_count = 5
+    keyword_count = 10
     co_word_count = 10
     for keyword_tuple in sorted_keywords[:keyword_count]:
         word = keyword_tuple[0]
-        co_occurrence = co_occurrence_analysis(review_df["review_content"], word)
+        co_occurrence = co_occurrence_analysis(review_df[review_df["label"] == "Fresh"]["review_content"], word)
         top_words = [(k,v) for k, v in co_occurrence.items()][:co_word_count]
         print(keyword_tuple, top_words)
 
