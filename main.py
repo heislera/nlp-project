@@ -13,8 +13,11 @@ from nltk import word_tokenize
 import yake
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.ensemble import RandomForestClassifier
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
+from wordcloud import WordCloud
 
 pd.set_option('display.max_columns', None)
 
@@ -283,28 +286,37 @@ def train_random_forest_model(critic_reviews):
     rfc.fit(X, labels)
     print("random forest train time", time.time() - start_time)
 
+    generate_plot(keywords, rfc)
 
-
-    #
-    # import numpy as np
-    #
-    # importances = rfc.feature_importances_
-    # std = np.std([tree.feature_importances_ for tree in rfc.estimators_], axis=0)
-    #
-    # d = {"importances": importances, "std": std}
-    # forest_importances = pd.DataFrame(d, index=keywords)
-    # forest_importances.sort_values(by="importances", ascending=False, inplace=True)
-    # forest_importances = forest_importances[:10]
-    #
-    # fig, ax = plt.subplots()
-    # forest_importances["importances"].plot.bar(yerr=forest_importances["std"], ax=ax)
-    # ax.set_title("Feature importances using MDI")
-    # ax.set_ylabel("Mean decrease in impurity")
-    # fig.tight_layout()
-    # plt.show()
-
+    generate_wordCloud(keywords)
 
     return rfc
+
+
+def generate_plot(keywords, rfc):
+    import numpy as np
+    importances = rfc.feature_importances_
+    std = np.std([tree.feature_importances_ for tree in rfc.estimators_], axis=0)
+    d = {"importances": importances, "std": std}
+    forest_importances = pd.DataFrame(d, index=keywords)
+    forest_importances.sort_values(by="importances", ascending=False, inplace=True)
+    forest_importances = forest_importances[:10]
+    fig, ax = plt.subplots()
+    forest_importances["importances"].plot.bar(yerr=forest_importances["std"], ax=ax)
+    ax.set_title("Feature importances using MDI")
+    ax.set_ylabel("Mean decrease in impurity")
+    fig.tight_layout()
+    plt.show()
+
+
+def generate_wordCloud(keywords):
+    # Generate WordCloud
+    wordcloud = WordCloud().generate(' '.join(keywords))
+    # Display the WordCloud
+    plt.figure(figsize=(10, 10))
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis('off')
+    plt.show()
 
 
 def extract_important_features(model, keywords):
