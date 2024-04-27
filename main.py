@@ -9,10 +9,11 @@ import gensim
 import nltk
 import pandas as pd
 import re
-import contractions
+# import contractions
 from gensim.models.doc2vec import TaggedDocument, Doc2Vec
 from nltk import word_tokenize
 import yake
+from rake_nltk import Rake
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
@@ -92,20 +93,21 @@ def clean_review_data(critic_reviews):
     return critic_reviews
 
 
-def decontract(word):
-    return contractions.fix(word)
+#
+# def decontract(word):
+#     return contractions.fix(word)
 
 
 def remove_punctuation(text):
     return text.translate(str.maketrans('', '', string.punctuation))
 
 
-def remove_contractions_from_reviews(critic_reviews):
-    """
-    Note: This may cause issues for certain contractions like ain't which may split into multiple pairs of words.
-    Just something to keep in mind for this in the future.
-    """
-    return critic_reviews['review_content'].apply(lambda x: ' '.join([decontract(word) for word in x.split()]))
+# def remove_contractions_from_reviews(critic_reviews):
+#     """
+#     Note: This may cause issues for certain contractions like ain't which may split into multiple pairs of words.
+#     Just something to keep in mind for this in the future.
+#     """
+#     return critic_reviews['review_content'].apply(lambda x: ' '.join([decontract(word) for word in x.split()]))
 
 
 """
@@ -369,24 +371,54 @@ def merge_movie_review_features(percentage, critic_reviews):
     return rand_reviews
 
 
+"""
+This method uses the YAKE library, which has proven to be very difficult when trying to make an executable.
+"""
+# def extract_review_keywords(reviews, num_keywords=3):
+#     data = []
+#
+#     for review, label in zip(reviews["review_content"], reviews["review_type"]):
+#         yake_kw = yake.KeywordExtractor()
+#         keywords = yake_kw.extract_keywords(review)
+#
+#         # Filter out single-word keywords - this is done because most of the single-word keywords
+#         # aren't very helpful (ex. 'lightning', 'fantasy' were returned for percy jackson as important keywords)
+#         keywords = [keyword[0] for keyword in keywords if " " not in keyword[0]]
+#
+#         # Sort keywords based on their scores in descending order
+#         keywords_sorted = sorted(keywords, key=lambda x: x[1], reverse=True)
+#
+#         # Get top n keyword phrases and append to dataframe
+#         top_n_keywords = keywords_sorted[:num_keywords]
+#         data.append({'label': label, 'review_content': str(review), 'keywords': top_n_keywords})
+#
+#     review_df = pd.DataFrame(data)
+#
+#     return review_df
+
+
+"""
+This method uses the RAKE library, which works when making an executable. :)
+"""
 def extract_review_keywords(reviews, num_keywords=3):
     data = []
 
-    for review, label in zip(reviews["review_content"], reviews["review_type"]):
-        yake_kw = yake.KeywordExtractor()
-        keywords = yake_kw.extract_keywords(review)
+    # Initialize the Rake object
+    rake = Rake()
 
-        # Filter out single-word keywords - this is done because most of the single-word keywords
-        # aren't very helpful (ex. 'lightning', 'fantasy' were returned for percy jackson as important keywords)
-        keywords = [keyword[0] for keyword in keywords if " " not in keyword[0]]
+    for review, label in zip(reviews["review_content"], reviews["review_type"]):
+        # Extract keywords using RAKE
+        keywords = rake.extract_keywords_from_text(review)
+        keywords = rake.get_ranked_phrases()
+        single_word_keywords = [keyword for keyword in keywords if " " not in keyword]
 
         # Sort keywords based on their scores in descending order
-        keywords_sorted = sorted(keywords, key=lambda x: x[1], reverse=True)
-
+        keywords_sorted = sorted(single_word_keywords, key=lambda x: x[1], reverse=True)
         # Get top n keyword phrases and append to dataframe
         top_n_keywords = keywords_sorted[:num_keywords]
         data.append({'label': label, 'review_content': str(review), 'keywords': top_n_keywords})
 
+    # Create a DataFrame from the data list
     review_df = pd.DataFrame(data)
 
     return review_df
@@ -432,7 +464,6 @@ def main() -> None:
         model = generate_model(critic_reviews, movie_data, movie_data_features)
         model.save("model.model")
 
-
     # below this is just testing the model
 
     print("NOTICE: For the following questions, please just list the desired input")
@@ -458,8 +489,9 @@ def main() -> None:
 
     if len(filtered_similarity) < 5:
         filtered_similarity = similar_docs[:5]
-        print(f"WARN: Input user parameters has no movie documents with similarity higher than set minimum value of {min_similarity}.\n"
-              f"Defaulting to top 5 documents")
+        print(
+            f"WARN: Input user parameters has no movie documents with similarity higher than set minimum value of {min_similarity}.\n"
+            f"Defaulting to top 5 documents")
 
     review_data = []
 
@@ -491,7 +523,7 @@ def main() -> None:
         word = keyword_tuple[0]
         co_occurrence = co_occurrence_analysis(review_df["review_content"], word)
         top_words = [(k, v) for k, v in co_occurrence.items()][:co_word_count]
-        print(keyword_tuple, top_words)
+        # print(keyword_tuple, top_words)
         if len(top_words) > 1:  # make sure there's enough words to generate a word cloud
             keyword_and_co_occurrences.append((word, top_words))
     generate_wordcloud(keyword_and_co_occurrences)
