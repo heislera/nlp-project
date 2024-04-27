@@ -435,15 +435,6 @@ def main() -> None:
 
     # below this is just testing the model
 
-
-    # TODO GET INPUT FROM USER
-    """
-    order:
-    movies that inspire you?
-    
-    movie genres?
-    """
-
     print("NOTICE: For the following questions, please just list the desired input")
     movie_titles = input("What are some movies that inspire you? (Press enter to skip)\n")
     genres = input("What genres do you want your movie to be? (Press enter to skip)\n")
@@ -464,6 +455,12 @@ def main() -> None:
 
     min_similarity = 0.7
     filtered_similarity = list(filter(lambda x: x[1] >= min_similarity, similar_docs))
+    print(filtered_similarity)
+
+    if len(filtered_similarity) < 5:
+        filtered_similarity = similar_docs[:5]
+        print(f"WARN: Input user parameters has no movie documents with similarity higher than set minimum value of {min_similarity}.\n"
+              f"Defaulting to top 5 documents")
 
     review_data = []
 
