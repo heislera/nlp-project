@@ -455,7 +455,6 @@ def main() -> None:
 
     min_similarity = 0.7
     filtered_similarity = list(filter(lambda x: x[1] >= min_similarity, similar_docs))
-    print(filtered_similarity)
 
     if len(filtered_similarity) < 5:
         filtered_similarity = similar_docs[:5]
