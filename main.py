@@ -432,11 +432,30 @@ def main() -> None:
         model = generate_model(critic_reviews, movie_data, movie_data_features)
         model.save("model.model")
 
-    training_df = pd.read_csv(f"data/movie_title_genres_directors_actors_movie_info_critics_consensus_WITH_REVIEWS.csv")
 
     # below this is just testing the model
 
-    test_doc = training_df.at[0, "merged_features"]
+
+    # TODO GET INPUT FROM USER
+    """
+    order:
+    movies that inspire you?
+    
+    movie genres?
+    """
+
+    print("NOTICE: For the following questions, please just list the desired input")
+    movie_titles = input("What are some movies that inspire you? (Press enter to skip)\n")
+    genres = input("What genres do you want your movie to be? (Press enter to skip)\n")
+    directors = input("Are there any specific directors you like? (Press enter to skip)\n")
+    actors = input("Are there any specific actors you have in mind? (Press enter to skip)\n")
+    print("You can answer the following as free form text.")
+    description = input("Describe the movie you want to create:\n")
+
+    # todo merge cleaned user input?
+    test_doc = " ".join([movie_titles, genres, directors, actors, description])
+    test_doc = test_doc.lower()
+    test_doc = re.sub("[^a-z0-9' ]", "", str(test_doc))
 
     # this is how we calculate similarity for an input doc
     tokenized_doc = word_tokenize(test_doc.lower())
