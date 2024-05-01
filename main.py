@@ -1,7 +1,6 @@
 import os
 import random
 import string
-import time
 from collections import defaultdict
 from nltk.corpus import stopwords
 
@@ -174,7 +173,7 @@ def create_training_data(critic_reviews, movie_data, features=None):
 
     if features[-1]:
         use_reviews = True
-        features = features[:-1]
+    features = features[:-1]
 
     df_name = "_".join(features)
 
@@ -204,12 +203,12 @@ def create_training_data(critic_reviews, movie_data, features=None):
     print("finished making movie documents")
 
 
-def train_similarity_model(features, vector_size=100, epochs=20):
+def train_similarity_model(features, vector_size=100, epochs=30):
     use_reviews = False
 
     if features[-1]:
         use_reviews = True
-        features = features[:-1]
+    features = features[:-1]
 
     df_name = "_".join(features)
 
@@ -228,7 +227,7 @@ def train_similarity_model(features, vector_size=100, epochs=20):
 
     print("begin training")
     # docs for this are here https://radimrehurek.com/gensim/models/doc2vec.html
-    model = gensim.models.doc2vec.Doc2Vec(vector_size=vector_size, epochs=epochs)
+    model = gensim.models.doc2vec.Doc2Vec(vector_size=vector_size, epochs=epochs, dm=0)
 
     model.build_vocab(tagged_data)
 
@@ -264,8 +263,7 @@ def train_random_forest_model(critic_reviews):
 
     labels = critic_reviews["label"]
 
-    # todo maybe binary should be true, it's mentioned in the chatGPT thing im using as reference to this
-    vectorizer = CountVectorizer(vocabulary=keywords, binary=False)
+    vectorizer = CountVectorizer(vocabulary=keywords, binary=True)
     X = vectorizer.fit_transform(reviews)
 
     rfc = RandomForestClassifier(n_estimators=3)
@@ -400,7 +398,7 @@ This method uses the YAKE library, which has proven to be very difficult when tr
 """
 This method uses the RAKE library, which works when making an executable. :)
 """
-def extract_review_keywords(reviews, num_keywords=3):
+def extract_review_keywords(reviews):
     data = []
 
     # Initialize the Rake object
@@ -410,13 +408,7 @@ def extract_review_keywords(reviews, num_keywords=3):
         # Extract keywords using RAKE
         keywords = rake.extract_keywords_from_text(review)
         keywords = rake.get_ranked_phrases()
-        single_word_keywords = [keyword for keyword in keywords if " " not in keyword]
-
-        # Sort keywords based on their scores in descending order
-        keywords_sorted = sorted(single_word_keywords, key=lambda x: x[1], reverse=True)
-        # Get top n keyword phrases and append to dataframe
-        top_n_keywords = keywords_sorted[:num_keywords]
-        data.append({'label': label, 'review_content': str(review), 'keywords': top_n_keywords})
+        data.append({'label': label, 'review_content': str(review), 'keywords': keywords})
 
     # Create a DataFrame from the data list
     review_df = pd.DataFrame(data)
@@ -523,10 +515,22 @@ def main() -> None:
         word = keyword_tuple[0]
         co_occurrence = co_occurrence_analysis(review_df["review_content"], word)
         top_words = [(k, v) for k, v in co_occurrence.items()][:co_word_count]
-        # print(keyword_tuple, top_words)
+        print(keyword_tuple, top_words)
         if len(top_words) > 1:  # make sure there's enough words to generate a word cloud
             keyword_and_co_occurrences.append((word, top_words))
+
+    #todo remove this
+    print("ALL SIMILARITIES")
+
     generate_wordcloud(keyword_and_co_occurrences)
+    for doc_id, similarity in similar_docs:
+        movie_title = get_movie_title(doc_id)
+        print("Similar movie: ", movie_title, "\tSimilarity Score: ", similarity)
+
+        if movie_title == "Kill Bill: Volume 1":
+            break
+
+
 
 
 if __name__ == '__main__':
