@@ -203,7 +203,7 @@ def create_training_data(critic_reviews, movie_data, features=None):
     print("finished making movie documents")
 
 
-def train_similarity_model(features, vector_size=100, epochs=30):
+def train_similarity_model(features, vector_size=100, epochs=40):
     use_reviews = False
 
     if features[-1]:
@@ -227,7 +227,7 @@ def train_similarity_model(features, vector_size=100, epochs=30):
 
     print("begin training")
     # docs for this are here https://radimrehurek.com/gensim/models/doc2vec.html
-    model = gensim.models.doc2vec.Doc2Vec(vector_size=vector_size, epochs=epochs, dm=0)
+    model = gensim.models.doc2vec.Doc2Vec(vector_size=vector_size, epochs=epochs, dm=0, dbow_words=1)
 
     model.build_vocab(tagged_data)
 
@@ -519,19 +519,7 @@ def main() -> None:
         if len(top_words) > 1:  # make sure there's enough words to generate a word cloud
             keyword_and_co_occurrences.append((word, top_words))
 
-    #todo remove this
-    print("ALL SIMILARITIES")
-
     generate_wordcloud(keyword_and_co_occurrences)
-    for doc_id, similarity in similar_docs:
-        movie_title = get_movie_title(doc_id)
-        print("Similar movie: ", movie_title, "\tSimilarity Score: ", similarity)
-
-        if movie_title == "Kill Bill: Volume 1":
-            break
-
-
-
 
 if __name__ == '__main__':
     main()
